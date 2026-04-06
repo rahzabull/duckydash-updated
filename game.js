@@ -99,6 +99,7 @@
     over: false,
     dying: false,
     pendingStart: false,
+    orientationHold: false,
     score: 0,
     highScore: Number(localStorage.getItem("ducky-dash-high-score") || 0),
     distance: 0,
@@ -329,8 +330,33 @@
   function updateRotatePromptState() {
     ui.gameStage.classList.toggle(
       "show-rotate-notice",
-      IS_TOUCH_DEVICE && !state.over && !state.dying && (state.running || state.pendingStart)
+      IS_TOUCH_DEVICE && !state.over && !state.dying && (state.pendingStart || state.orientationHold)
     );
+  }
+
+  function syncOrientationState() {
+    if (!IS_TOUCH_DEVICE || state.over || state.dying) {
+      state.orientationHold = false;
+      updateRotatePromptState();
+      return;
+    }
+
+    const landscape = isLandscapeViewport();
+
+    if (state.pendingStart && landscape) {
+      startGame();
+      return;
+    }
+
+    if (state.running) {
+      state.orientationHold = !landscape;
+      state.paused = state.orientationHold;
+      ui.pauseBadge.style.display = state.orientationHold ? "none" : (state.paused ? "block" : "none");
+    } else {
+      state.orientationHold = false;
+    }
+
+    updateRotatePromptState();
   }
 
   function resetGame() {
@@ -339,6 +365,7 @@
     state.over = false;
     state.dying = false;
     state.pendingStart = false;
+    state.orientationHold = false;
     state.score = 0;
     state.distance = 0;
     state.speed = CONFIG.startSpeed;
@@ -406,6 +433,8 @@
   function startGame() {
     if (IS_TOUCH_DEVICE && !isLandscapeViewport()) {
       state.pendingStart = true;
+      setOverlayVisibility(ui.startScreen, false);
+      setOverlayVisibility(ui.gameOverScreen, false);
       updateRotatePromptState();
       return;
     }
@@ -413,6 +442,7 @@
     if (!state.running) {
       resetGame();
     }
+    state.orientationHold = false;
     updateRotatePromptState();
   }
 
@@ -452,6 +482,8 @@
     state.running = false;
     state.over = true;
     state.dying = false;
+    state.pendingStart = false;
+    state.orientationHold = false;
     state.highScore = Math.max(state.highScore, state.score);
     localStorage.setItem("ducky-dash-high-score", String(state.highScore));
     ui.finalScore.textContent = String(state.score);
@@ -466,6 +498,8 @@
     }
     state.running = false;
     state.dying = true;
+    state.pendingStart = false;
+    state.orientationHold = false;
     updateRotatePromptState();
     player.deathStartedOnGround = player.onGround;
     trex.deathX = trex.x;
@@ -1641,26 +1675,20 @@
   window.addEventListener("keydown", handleKeyDown);
   window.addEventListener("resize", () => {
     updateViewportMetrics();
-    if (state.pendingStart && isLandscapeViewport()) {
-      startGame();
-    }
+    syncOrientationState();
     resizeCanvas();
   });
   window.addEventListener("orientationchange", () => {
     window.setTimeout(() => {
       updateViewportMetrics();
-      if (state.pendingStart && isLandscapeViewport()) {
-        startGame();
-      }
+      syncOrientationState();
       resizeCanvas();
     }, 120);
   });
   if (window.visualViewport) {
     window.visualViewport.addEventListener("resize", () => {
       updateViewportMetrics();
-      if (state.pendingStart && isLandscapeViewport()) {
-        startGame();
-      }
+      syncOrientationState();
     });
     window.visualViewport.addEventListener("scroll", updateViewportMetrics);
   }
@@ -1669,7 +1697,7 @@
   resizeCanvas();
   bindTouchControls();
   updateHud();
-  updateRotatePromptState();
+  syncOrientationState();
   render();
   requestAnimationFrame(frame);
 })();
